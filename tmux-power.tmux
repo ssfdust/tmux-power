@@ -18,32 +18,6 @@ tmux_set() {
     tmux set-option -gq "$1" "$2"
 }
 
-tmux_lan_ip() {
-    all_nics="$(ip addr show | cut -d ' ' -f2 | tr -d :)"
-    all_nics=(${all_nics[@]//lo/})	 # Remove lo interface.
-
-    for nic in "${all_nics[@]}"; do
-        # Parse IP address for the NIC.
-        lan_ip="$(ip addr show ${nic} | grep '\<inet\>' | tr -s ' ' | cut -d ' ' -f3)"
-        # Trim the CIDR suffix.
-        lan_ip="${lan_ip%/*}"
-        # Only display the last entry
-        lan_ip="$(echo "$lan_ip" | tail -1)"
-
-        [ -n "$lan_ip" ] && break
-    done
-	echo " ${lan_ip-N/a}"
-}
-tmux_weather() {
-    if [[ -f /tmp/tmux-weather/weather.txt ]];then
-        /usr/bin/cat /tmp/tmux-weather/weather.txt
-    else
-        echo ""
-    fi
-}
-tmux_mailcount() {
-    echo $(notmuch count --output=messages "tag:unread")
-}
 
 # Options
 right_arrow_icon=$(tmux_get '@tmux_power_right_arrow_icon' '')
@@ -54,8 +28,13 @@ session_icon="$(tmux_get '@tmux_power_session_icon' '')"
 user_icon="$(tmux_get '@tmux_power_user_icon' '')"
 time_icon="$(tmux_get '@tmux_power_time_icon' '')"
 date_icon="$(tmux_get '@tmux_power_date_icon' '')"
+mail_icon="$(tmux_get '@tmux_power_mail_icon', '')"
+address_icon="$(tmux_get '@tmux_power_address_icon', '')"
 show_upload_speed="$(tmux_get @tmux_power_show_upload_speed false)"
 show_download_speed="$(tmux_get @tmux_power_show_download_speed false)"
+show_mailcount="$(tmux_get @tmux_power_show_mailcount false)"
+show_ip="$(tmux_get @tmux_power_show_ip false)"
+show_weather="$(tmux_get @tmux_power_show_weather false)"
 prefix_highlight_pos=$(tmux_get @tmux_power_prefix_highlight_pos)
 # short for Theme-Colour
 TC=$(tmux_get '@tmux_power_theme' 'gold')
@@ -128,8 +107,21 @@ tmux_set status-left-bg "$G04"
 tmux_set status-left-fg "G12"
 tmux_set status-left-length 150
 user=$(whoami)
-LS="#[fg=$G04,bg=$TC,bold] #h #[fg=$TC,bg=$G06,nobold]$right_arrow_icon#[fg=$TC,bg=$G06] $session_icon #S ✉ $(tmux_mailcount) #[fg=$G06,bg=$G05,nobold]$right_arrow_icon#[fg=$TC,bg=$G05] $(tmux_lan_ip)"
-if "$show_upload_speed"; then
+if [[ "$show_mailcount" == "true" && "$show_ip" != "true" ]]; then
+    LS="#[fg=$G04,bg=$TC,bold] #h #[fg=$TC,bg=$G06,nobold]$right_arrow_icon#[fg=$TC,bg=$G06] $session_icon #S $mail_icon #{mailcount} #[fg=$G06,bg=$G04,nobold]$right_arrow_icon#[fg=$TC,bg=$G05]"
+elif "$show_mailcount"; then
+    LS="#[fg=$G04,bg=$TC,bold] #h #[fg=$TC,bg=$G06,nobold]$right_arrow_icon#[fg=$TC,bg=$G06] $session_icon #S $mail_icon #{mailcount} #[fg=$G06,bg=$G05,nobold]$right_arrow_icon#[fg=$TC,bg=$G05]"
+else
+    LS="#[fg=$G04,bg=$TC,bold] #h #[fg=$TC,bg=$G06,nobold]$right_arrow_icon#[fg=$TC,bg=$G06] $session_icon #S #[fg=$G06,bg=$G04,nobold]$right_arrow_icon"
+fi
+if "$show_ip"; then
+    LS="$LS #{ip_addr}"
+else
+    LS="$LS"
+fi
+if [[ "$show_upload_speed" == "true" && "$show_ip" != "true" ]]; then
+    LS="$LS#[fg=$G04,bg=$G04]$right_arrow_icon#[fg=$TC,bg=$G04] $upload_speed_icon#{upload_speed} #[fg=$G04,bg=$BG]$right_arrow_icon"
+elif [[ "$show_upload_speed" == "true" ]]; then
     LS="$LS#[fg=$G05,bg=$G04]$right_arrow_icon#[fg=$TC,bg=$G04] $upload_speed_icon#{upload_speed} #[fg=$G04,bg=$BG]$right_arrow_icon"
 else
     LS="$LS#[fg=$G05,bg=$BG]$right_arrow_icon"
@@ -152,7 +144,9 @@ fi
 if [[ $prefix_highlight_pos == 'R' || $prefix_highlight_pos == 'LR' ]]; then
     RS="#{prefix_highlight}$RS"
 fi
-RS="#[fg=$G04,bg=$BG]$left_arrow_icon#[fg=$TC,bg=$G04] $(tmux_weather)$RS"
+if "$show_weather";then
+    RS="#[fg=$G04,bg=$BG]$left_arrow_icon#[fg=$TC,bg=$G04] #{weather} $RS"
+fi
 tmux_set status-right "$RS"
 
 # Window status
